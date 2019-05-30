@@ -35,6 +35,7 @@ type AssetOptions = {|
   hash?: ?string,
   idBase?: string,
   filePath: FilePath,
+  fileMode?: ?number,
   type: string,
   content?: Blob,
   contentKey?: ?string,
@@ -65,6 +66,7 @@ export default class Asset {
   hash: ?string;
   idBase: string;
   filePath: FilePath;
+  fileMode: ?number;
   type: string;
   ast: ?AST;
   map: ?SourceMap;
@@ -91,6 +93,7 @@ export default class Asset {
           );
     this.hash = options.hash;
     this.filePath = options.filePath;
+    this.fileMode = options.fileMode;
     this.isIsolated = options.isIsolated == null ? false : options.isIsolated;
     this.type = options.type;
     this.content = options.content || '';
@@ -117,6 +120,7 @@ export default class Asset {
       id: this.id,
       hash: this.hash,
       filePath: this.filePath,
+      fileMode: this.fileMode,
       type: this.type,
       dependencies: Array.from(this.dependencies),
       connectedFiles: Array.from(this.connectedFiles),
@@ -293,6 +297,7 @@ export default class Asset {
       idBase: this.idBase,
       hash,
       filePath: this.filePath,
+      fileMode: this.fileMode,
       type: result.type,
       content,
       ast: result.ast,

@@ -23,6 +23,7 @@ import {
 import Cache from '@parcel/cache';
 import {TapStream, unique} from '@parcel/utils';
 import {createReadStream} from 'fs';
+import {stat} from '@parcel/fs';
 
 import Dependency from './Dependency';
 import Config from './Config';
@@ -67,7 +68,7 @@ export default class TransformerRunner {
       cacheEntry = await Cache.get(reqCacheKey(req));
     }
 
-    let {content, size, hash} = await summarizeRequest(req);
+    let {content, size, hash, fileMode} = await summarizeRequest(req);
     if (
       cacheEntry &&
       cacheEntry.hash === hash &&
@@ -81,6 +82,7 @@ export default class TransformerRunner {
       // use a hash as the base for the id to ensure it is unique.
       idBase: req.code ? hash : req.filePath,
       filePath: req.filePath,
+      fileMode,
       type: path.extname(req.filePath).slice(1),
       ast: null,
       content,
@@ -324,11 +326,13 @@ function reqCacheKey(req: AssetRequest): string {
 
 async function summarizeRequest(
   req: AssetRequest
-): Promise<{|content: Blob, hash: string, size: number|}> {
+): Promise<{|content: Blob, hash: string, size: number, fileMode: ?number|}> {
   let code = req.code;
   let content: Blob;
   let hash: string;
   let size: number;
+  let fileMode: ?number;
+
   if (code == null) {
     // As an optimization for the common case of source code, while we read in
     // data to compute its md5 and size, buffer its contents in memory.
@@ -337,29 +341,37 @@ async function summarizeRequest(
     // lazily read it at a later point.
     content = Buffer.from([]);
     size = 0;
-    hash = await md5FromReadableStream(
-      createReadStream(req.filePath).pipe(
-        new TapStream(buf => {
-          size += buf.length;
-          if (content instanceof Buffer) {
-            if (size > BUFFER_LIMIT) {
-              // if buffering this content would put this over BUFFER_LIMIT, replace
-              // it with a stream
-              content = createReadStream(req.filePath);
-            } else {
-              content = Buffer.concat([content, buf]);
+    [hash, fileMode] = await Promise.all([
+      md5FromReadableStream(
+        createReadStream(req.filePath).pipe(
+          new TapStream(buf => {
+            size += buf.length;
+            if (content instanceof Buffer) {
+              if (size > BUFFER_LIMIT) {
+                // if buffering this content would put this over BUFFER_LIMIT, replace
+                // it with a stream
+                content = createReadStream(req.filePath);
+              } else {
+                content = Buffer.concat([content, buf]);
+              }
             }
-          }
-        })
-      )
-    );
+          })
+        )
+      ),
+      // `mode` is a decimal representation of the more common octal format of
+      // unix file permissions. Assign it to the asset so it can be used to determine
+      // the permissions of the output bundle. Node's documentation on this is pretty
+      // sparse as it's probably just the result of a `stat` syscall. More info:
+      // https://stackoverflow.com/questions/11775884/nodejs-file-permissions
+      stat(req.filePath).then(stats => stats.mode)
+    ]);
   } else {
     content = code;
     hash = md5FromString(code);
     size = Buffer.from(code).length;
   }
 
-  return {content, hash, size};
+  return {content, hash, size, fileMode};
 }
 
 function normalizeAssets(

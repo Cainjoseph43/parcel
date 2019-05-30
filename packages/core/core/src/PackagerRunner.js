@@ -44,11 +44,17 @@ export default class PackagerRunner {
       this.distExists.add(dir);
     }
 
+    let fileMode = bundle.assetGraph.getEntryAssets()[0].fileMode;
+    let options = {};
+    if (fileMode != null) {
+      options.mode = fileMode;
+    }
+
     let size;
     if (contents instanceof Readable) {
-      size = await writeFileStream(filePath, contents);
+      size = await writeFileStream(filePath, contents, options);
     } else {
-      await writeFile(filePath, contents);
+      await writeFile(filePath, contents, options);
       size = contents.length;
     }
 
